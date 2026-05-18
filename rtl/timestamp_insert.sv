@@ -51,23 +51,24 @@ module timestamp_insert(
     // preserve data while inserting timestamp by clearing target bits with the above mask then OR in the timestamp
     wire [511:0] inserted = (axis_input_tdata & ~timestamp_mask) | timestamp_placed;
 
+
+    // detect if timestamp passes a boundary
+    // payload_offset + 8 > 64 bytes: span two beats
+    assign timestamp_span_beat = (payload_offset + 16'd8 > 16'd64);
+
     // conditions for insert:
     // enable is high
     // udp_valid high
     // timestamp does not span beat boundary
     wire ok_insert = enable & udp_valid & ~timestamp_span_beat;
 
-    // detect if timestamp passes a boundary
-    // payload_offset + 8 > 64 bytes: span two beats
-    assign timestamp_span_beat = (payload_offset + 16'd8 > 16'd64);
-
-    // handshake to go when input valid and downstream ready
+    // handshake to go when input valid and downstream ready   
     wire go = axis_input_tvalid & output_tready;
 
     // fsm datapath
     always_ff @(posedge clk or negedge rst_n) begin
+        // reset everything
         if (!rst_n) begin
-            // reset everything
             state <= IDLE;
             s0_data <= '0;
             s0_valid <= 0;
@@ -89,7 +90,11 @@ module timestamp_insert(
 
                 // stage 0 gets new input data
                 // if idle and we should insert, use modified 'inserted' data instead of raw input
-                s0_data <= (state == IDLE && ok_insert) ? inserted : axis_input_tdata;
+                if (state == IDLE && ok_insert)
+                    s0_data <= inserted;
+                else
+                    s0_data <= axis_input_tdata;
+
                 s0_valid <= axis_input_tvalid;
                 s0_last <= axis_input_tlast;
                 s0_keep <= axis_input_tkeep;
@@ -100,15 +105,13 @@ module timestamp_insert(
                 IDLE: begin
                     // wait for start of packet
                     // if go, transition
-                    // if last beat go back to idle, otherwise go to passthrough
+                    // if last beat go back to idle, otherwise go to passthrough                    
                     if (go) state <= axis_input_tlast ? IDLE : PASSTHROUGH;
                 end
-
                 PASSTHROUGH: begin
                     // just forward the rest of the beats
                     if (go) state <= axis_input_tlast ? IDLE : PASSTHROUGH;
                 end
-
                 default: state <= IDLE;
             endcase
         end
