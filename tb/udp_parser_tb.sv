@@ -1,6 +1,3 @@
-// tb_udp_parser.sv
-// Directed testbench for UDP parser pipeline with latency measurement
-
 `timescale 1ns/1ps
 import udp_parser_package::*;
 
