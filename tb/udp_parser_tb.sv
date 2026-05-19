@@ -1,3 +1,6 @@
+// tb_udp_parser.sv
+// Directed testbench for UDP parser pipeline with latency measurement
+
 `timescale 1ns/1ps
 import udp_parser_package::*;
 
@@ -20,6 +23,14 @@ module tb_udp_parser;
     // Control signals
     logic reg_enable;
     logic [15:0] dst_port_filter;
+
+    // Latency measurement
+    logic [63:0] cycle_counter;
+    logic [63:0] start_cycle, end_cycle;
+    logic [63:0] min_latency, max_latency, sum_latency;
+    int packet_count;
+    logic packet_in_progress;
+    logic output_in_progress;
 
     // Clock: 100 MHz
     initial clk = 1'b0;
@@ -49,6 +60,56 @@ module tb_udp_parser;
         .reg_enable(reg_enable),
         .dst_port_filter(dst_port_filter)
     );
+
+    // Free-running cycle counter
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            cycle_counter <= '0;
+        else
+            cycle_counter <= cycle_counter + 1;
+    end
+
+    // Latency measurement
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            packet_in_progress <= 1'b0;
+            output_in_progress <= 1'b0;
+            start_cycle <= '0;
+            end_cycle <= '0;
+            min_latency <= 64'hFFFFFFFF_FFFFFFFF;
+            max_latency <= '0;
+            sum_latency <= '0;
+            packet_count <= 0;
+        end else begin
+            // capture start on first input beat of a new packet
+            if (s_axis_tvalid && s_axis_tready && !packet_in_progress) begin
+                start_cycle <= cycle_counter;
+                packet_in_progress <= 1'b1;
+            end
+
+            // clear input flag at end of packet
+            if (s_axis_tvalid && s_axis_tready && s_axis_tlast)
+                packet_in_progress <= 1'b0;
+
+            // capture end on first output beat
+            if (m_axis_tvalid && m_axis_tready && !output_in_progress) begin
+                end_cycle <= cycle_counter;
+                output_in_progress <= 1'b1;
+
+                // update latency stats
+                if (cycle_counter - start_cycle < min_latency)
+                    min_latency <= cycle_counter - start_cycle;
+                if (cycle_counter - start_cycle > max_latency)
+                    max_latency <= cycle_counter - start_cycle;
+                sum_latency <= sum_latency + (cycle_counter - start_cycle);
+                packet_count <= packet_count + 1;
+            end
+
+            // clear output flag at end of packet
+            if (m_axis_tvalid && m_axis_tready && m_axis_tlast)
+                output_in_progress <= 1'b0;
+        end
+    end
 
     // axi-stream helpers
     typedef struct {
@@ -198,6 +259,8 @@ module tb_udp_parser;
         logic [7:0] payload5 [];
         stream_beat_t tx_beats5 [], rx_beats5 [];
         int tx_count5, rx_count5;
+        int fd;
+
         s_axis_tvalid = 0;
         m_axis_tready = 0;
         reg_enable = 1'b0;
@@ -209,8 +272,8 @@ module tb_udp_parser;
         $display(" UDP Parser Directed Test Sequence");
         $display("==============================================");
 
-        // configure
-        // NOTE: THIS WILL NOT SHOW UP PASS/FAIL SINCE IT IS JUST CONFIGURATION
+        // Test 1: Configure
+        // NOTE: NO PASS/FAIL SINCE IT IS JUST CONFIGURATION
         reg_enable = 1'b1;
         dst_port_filter = 16'h04D2;
         repeat(2) @(posedge clk);
@@ -293,9 +356,26 @@ module tb_udp_parser;
             end
         join
 
+        // Latency summary
         $display("\n==============================================");
-        $display(" All tests passed.");
+        $display(" Latency Summary");
         $display("==============================================");
+        if (packet_count > 0) begin
+            $display("Packets measured: %0d", packet_count);
+            $display("Min latency: %0d cycles", min_latency);
+            $display("Max latency: %0d cycles", max_latency);
+            $display("Avg latency: %0d cycles", sum_latency / packet_count);
+        end else begin
+            $display("No packets measured.");
+        end
+
+        // Write latency results to file
+        fd = $fopen("latency_results.txt", "w");
+        if (fd) begin
+            $fwrite(fd, "Latency summary: packets=%0d, min=%0d cycles, max=%0d cycles, avg=%0d cycles\n",
+                    packet_count, min_latency, max_latency, sum_latency / packet_count);
+            $fclose(fd);
+        end
         $finish;
     end
 endmodule

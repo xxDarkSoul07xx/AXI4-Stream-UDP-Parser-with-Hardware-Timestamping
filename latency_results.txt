@@ -1,0 +1,1 @@
+Latency summary: packets=2, min=8 cycles, max=8 cycles, avg=8 cycles
