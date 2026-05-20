@@ -11,34 +11,37 @@
 - 8-cycle parse latency with single-beat-per-cycle throughput
 
 ## Block Diagram
+```
+## Block Diagram
 
-AXI4-Stream          +-------------------+          AXI4-Stream
-Input -------->-----|                   |-------->------- Output
-(tdata,tvalid,       |  UDP Parser +     | (tdata,tvalid,
- tlast,tkeep,        |   Timestamp       |  tlast,tkeep,
- tready)             |                   |  tready)
-                     +-------------------+
-                            |
-                            | Control (reg_enable, dst_port_filter)
-                            |
-                      [Testbench / Register IP]
+```
+AXI4-Stream In                              AXI4-Stream Out
+     |                                            ^
+     v                                            |
++-------------------------------------------------+
+|                UDP Parser +                     |
+|              Timestamp Insertion                |
++-------------------------------------------------+
+     |                                            ^
+     |   Control (reg_enable, dst_port_filter)    |
+     +--------------------------------------------+
 
 Internal Pipeline:
 +----------------+  +----------------+  +----------------+
 | Ethernet Parser |->| IPv4 Parser   |->| UDP Parser     |
 +----------------+  +----------------+  +----------------+
-                                        |
-                                        v
-                               +----------------+
-                               | Port Filter    |--(match/miss)
-                               +----------------+
-                                        |
-                                        v
-                               +----------------+
-                               | Timestamp      |
-                               | Insertion      |
-                               +----------------+
-
+                                         |
+                                         v
+                                +----------------+
+                                | Port Filter    |
+                                +----------------+
+                                         |
+                                         v
+                                +----------------+
+                                | Timestamp      |
+                                | Insertion      |
+                                +----------------+
+```
 
 ## Resource Utilization
 Synthesized on Xilinx Artix-7:
