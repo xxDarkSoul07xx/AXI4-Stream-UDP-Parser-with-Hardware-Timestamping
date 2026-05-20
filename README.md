@@ -11,7 +11,7 @@
 - 8-cycle parse latency with single-beat-per-cycle throughput
 
 ## Block Diagram
-```
+
 AXI4-Stream          +-------------------+          AXI4-Stream
 Input -------->-----|                   |-------->------- Output
 (tdata,tvalid,       |  UDP Parser +     | (tdata,tvalid,
@@ -38,7 +38,7 @@ Internal Pipeline:
                                | Timestamp      |
                                | Insertion      |
                                +----------------+
-```
+
 
 ## Resource Utilization
 Synthesized on Xilinx Artix-7:
