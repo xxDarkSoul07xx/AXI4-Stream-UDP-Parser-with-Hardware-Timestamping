@@ -11,8 +11,6 @@
 - 8-cycle parse latency with single-beat-per-cycle throughput
 
 ## Block Diagram
-```
-## Block Diagram
 
 ```
 AXI4-Stream In                              AXI4-Stream Out
